@@ -1,0 +1,14 @@
+# Ignore compiled JavaScript files
+*.js
+*.js.map
+
+# Ignore TypeScript build output directory
+/dist/
+
+# Ignore node_modules directory
+node_modules/
+
+# Ignore any files or directories that may be generated during development or builds
+.DS_Store
+.vscode/
+npm-debug.log
