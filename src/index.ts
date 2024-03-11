@@ -1,28 +1,55 @@
 import express from 'express';
-import ffmpeg from 'fluent-ffmpeg';
+
+import {
+    uploadProcessedVideo,
+    setupDirectories,
+    convertVideo,
+    downloadRawVideo,
+    deleteRawVideo,
+    deleteProcessedVideo
+} from './storage';
+
+setupDirectories();
 
 const app = express();
 app.use(express.json());
 
-app.post('/process-video', (req, res) => {
-    const inputFilePath = req.body.inputFilePath;
-    const outputFilePath = req.body.outputFilePath;
-
-    if (!inputFilePath || !outputFilePath) {
-        return res.status(400).send('Bad Request: Missing file path');
+app.post('/process-video', async (req, res) => {
+    let data;
+    try {
+        const message = Buffer.from(req.body.message.data, 'base64').toString('utf8');
+        data = JSON.parse(message);
+        if (!data.name) {
+            throw new Error('Invalid message payload');
+        }
+    } catch (error) {
+        console.error(error);
+        return res.status(400).send('Bad request: missing filename')
     }
 
-    ffmpeg(inputFilePath)
-        .outputOptions('-vf', 'scale=-1:360')
-        .on('end', () => {
-            console.log('Processing finished successfully');
-            res.status(200).send('Processing finished successfully');
-        })
-        .on('error', (err: any) => {
-            console.log(`An error occured - ${err.message}`);
-            res.status(500).send(`An error occured - ${err.message}`);
-        })
-        .save(outputFilePath);
+    const inputFileName = data.name;
+    const outputFileName = `processed-${inputFileName}`;
+
+    await downloadRawVideo(inputFileName);
+
+    try{
+        await convertVideo(inputFileName, outputFileName) 
+    } catch (error) {
+        await Promise.all([
+            deleteRawVideo(inputFileName),
+            deleteProcessedVideo(outputFileName)
+        ]);
+        return res.status(500).send('Processing failed');
+    }
+
+    await uploadProcessedVideo(outputFileName);
+
+    await Promise.all([
+        deleteRawVideo(inputFileName),
+        deleteProcessedVideo(outputFileName)
+    ]);
+
+    return res.status(200).send('Processing finished successfully');
 });
 
 const port = process.env.port || 3000;
